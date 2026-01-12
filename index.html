@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>단체선물 주문 현황</title>
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -16,7 +18,7 @@
         }
         
         .container { 
-            max-width: 1600px; 
+            max-width: 1800px; 
             margin: 0 auto;
         }
         
@@ -42,6 +44,7 @@
             gap: 20px;
             font-size: 0.9em;
             color: #666;
+            flex-wrap: wrap;
         }
         
         .primary-btn {
@@ -62,9 +65,22 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
         
-        .primary-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .btn-excel {
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-excel:hover {
+            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
         
         .summary-cards {
@@ -107,6 +123,80 @@
         .status-selected { color: #007bff; }
         .status-confirmed { color: #ffc107; }
         .status-delivered { color: #28a745; }
+        
+        .content-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+        }
+        
+        .main-content {
+            min-width: 0;
+        }
+        
+        .sidebar {
+            position: sticky;
+            top: 20px;
+            align-self: start;
+        }
+        
+        .summary-panel {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 25px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+        
+        .summary-panel h2 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.3em;
+            text-align: center;
+        }
+        
+        .product-summary-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .product-summary-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            transition: all 0.2s;
+        }
+        
+        .product-summary-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+        
+        .product-code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .product-name-summary {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
+        
+        .product-count {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #667eea;
+            font-weight: 700;
+            font-size: 1.1em;
+        }
         
         .controls {
             display: flex;
@@ -321,6 +411,20 @@
         .image-zoom-overlay.active { display: flex; }
         .image-zoom-content { max-width: 90%; max-height: 90%; object-fit: contain; }
         
+        @media (max-width: 1200px) {
+            .content-wrapper {
+                grid-template-columns: 1fr;
+            }
+            
+            .sidebar {
+                position: static;
+            }
+            
+            .summary-panel {
+                max-height: 500px;
+            }
+        }
+        
         @media (max-width: 768px) {
             .header-info {
                 flex-direction: column;
@@ -361,9 +465,10 @@
             <h1>🎁 단체선물 주문 현황</h1>
             <div class="header-info">
                 <span id="updateTime">마지막 업데이트: <strong id="lastUpdate">-</strong></span>
-                <button class="primary-btn" onclick="loadData()" style="padding: 8px 20px; font-size: 0.9em;">
-                    🔄 새로고침
-                </button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="primary-btn" onclick="loadData()">🔄 새로고침</button>
+                    <button class="btn-excel" onclick="downloadExcel()">📥 엑셀 다운로드</button>
+                </div>
             </div>
         </header>
 
@@ -390,48 +495,65 @@
             </div>
         </div>
 
-        <div class="table-container">
-            <div class="controls">
-                <input type="text" id="searchInput" class="search-box" placeholder="이름, 전화번호, 상품명으로 검색...">
-                <select id="statusFilter">
-                    <option value="">전체 상태</option>
-                    <option value="미선택">미선택</option>
-                    <option value="선택완료">선택완료</option>
-                    <option value="주문확정">주문확정</option>
-                    <option value="배송완료">배송완료</option>
-                </select>
+        <div class="content-wrapper">
+            <!-- 좌측: 주문 목록 -->
+            <div class="main-content">
+                <div class="table-container">
+                    <div class="controls">
+                        <input type="text" id="searchInput" class="search-box" placeholder="이름, 전화번호, 상품명으로 검색...">
+                        <select id="statusFilter">
+                            <option value="">전체 상태</option>
+                            <option value="미선택">미선택</option>
+                            <option value="선택완료">선택완료</option>
+                            <option value="주문확정">주문확정</option>
+                            <option value="배송완료">배송완료</option>
+                        </select>
+                    </div>
+
+                    <div id="loading" class="loading" style="display: none;">
+                        <div class="spinner"></div>
+                        데이터를 불러오는 중...
+                    </div>
+                    <div id="error" class="error" style="display: none;"></div>
+
+                    <div class="table-wrapper">
+                        <table id="ordersTable">
+                            <thead>
+                                <tr>
+                                    <th>번호</th>
+                                    <th>상품코드</th>
+                                    <th>상품명</th>
+                                    <th>상품이미지</th>
+                                    <th>수령인</th>
+                                    <th>연락처</th>
+                                    <th>상태</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <tr>
+                                    <td colspan="7" style="text-align: center; padding: 40px; color: #6c757d;">
+                                        데이터를 불러오는 중입니다...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="pagination" id="pagination"></div>
+                </div>
             </div>
 
-            <div id="loading" class="loading" style="display: none;">
-                <div class="spinner"></div>
-                데이터를 불러오는 중...
+            <!-- 우측: 상품별 요약 -->
+            <div class="sidebar">
+                <div class="summary-panel">
+                    <h2>📊 상품별 요약</h2>
+                    <div id="productSummary" class="product-summary-list">
+                        <div style="text-align: center; padding: 40px; color: #999;">
+                            데이터를 불러오는 중...
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div id="error" class="error" style="display: none;"></div>
-
-            <div class="table-wrapper">
-                <table id="ordersTable">
-                    <thead>
-                        <tr>
-                            <th>번호</th>
-                            <th>상품코드</th>
-                            <th>상품명</th>
-                            <th>상품이미지</th>
-                            <th>수령인</th>
-                            <th>연락처</th>
-                            <th>상태</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <tr>
-                            <td colspan="7" style="text-align: center; padding: 40px; color: #6c757d;">
-                                템플릿 번호를 입력하고 조회 버튼을 눌러주세요.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="pagination" id="pagination"></div>
         </div>
     </div>
 
@@ -552,6 +674,7 @@
                 filteredOrders = [...allOrders];
                 
                 updateSummary();
+                updateProductSummary();
                 updateLastUpdateTime();
                 applyFilters();
                 
@@ -561,6 +684,7 @@
                 allOrders = [];
                 filteredOrders = [];
                 updateSummary();
+                updateProductSummary();
                 renderTable();
             } finally {
                 showLoading(false);
@@ -594,6 +718,48 @@
             document.getElementById('deliveredCount').textContent = statusCounts.delivered;
         }
 
+        // ========================================
+        // 상품별 요약 업데이트
+        // ========================================
+        function updateProductSummary() {
+            const productMap = {};
+            
+            allOrders.forEach(order => {
+                const code = order.productCode || '미지정';
+                const name = order.productName || '미지정';
+                const key = `${code}_${name}`;
+                
+                if (!productMap[key]) {
+                    productMap[key] = {
+                        code: code,
+                        name: name,
+                        count: 0
+                    };
+                }
+                productMap[key].count++;
+            });
+            
+            const products = Object.values(productMap).sort((a, b) => b.count - a.count);
+            
+            const summaryDiv = document.getElementById('productSummary');
+            
+            if (products.length === 0) {
+                summaryDiv.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">데이터가 없습니다.</div>';
+                return;
+            }
+            
+            summaryDiv.innerHTML = products.map(product => `
+                <div class="product-summary-item">
+                    <div class="product-code">${product.code}</div>
+                    <div class="product-name-summary">${product.name}</div>
+                    <div class="product-count">
+                        <span>주문수량</span>
+                        <span>${product.count}개</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
         function updateLastUpdateTime() {
             const now = new Date();
             const timeString = now.toLocaleString('ko-KR', {
@@ -605,6 +771,66 @@
                 second: '2-digit'
             });
             document.getElementById('lastUpdate').textContent = timeString;
+        }
+
+        // ========================================
+        // 엑셀 다운로드
+        // ========================================
+        function downloadExcel() {
+            if (allOrders.length === 0) {
+                alert('다운로드할 데이터가 없습니다.');
+                return;
+            }
+            
+            // 주문 데이터 시트
+            const orderData = allOrders.map((order, index) => ({
+                '번호': index + 1,
+                '상품코드': order.productCode || '',
+                '상품명': order.productName || '',
+                '수령인': order.receiverName || '',
+                '연락처': order.receiverPhone || '',
+                '상태': order.status || ''
+            }));
+            
+            // 상품별 요약 시트
+            const productMap = {};
+            allOrders.forEach(order => {
+                const code = order.productCode || '미지정';
+                const name = order.productName || '미지정';
+                const key = `${code}_${name}`;
+                
+                if (!productMap[key]) {
+                    productMap[key] = {
+                        code: code,
+                        name: name,
+                        count: 0
+                    };
+                }
+                productMap[key].count++;
+            });
+            
+            const productData = Object.values(productMap)
+                .sort((a, b) => b.count - a.count)
+                .map(product => ({
+                    '상품코드': product.code,
+                    '상품명': product.name,
+                    '주문수량': product.count
+                }));
+            
+            // 워크북 생성
+            const wb = XLSX.utils.book_new();
+            
+            // 주문 목록 시트
+            const ws1 = XLSX.utils.json_to_sheet(orderData);
+            XLSX.utils.book_append_sheet(wb, ws1, "주문목록");
+            
+            // 상품별 요약 시트
+            const ws2 = XLSX.utils.json_to_sheet(productData);
+            XLSX.utils.book_append_sheet(wb, ws2, "상품별요약");
+            
+            // 파일 다운로드
+            const fileName = `단체선물_주문현황_${new Date().toISOString().slice(0,10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
         }
 
         // ========================================
@@ -776,6 +1002,7 @@
         window.zoomImage = zoomImage;
         window.closeZoom = closeZoom;
         window.loadData = loadData;
+        window.downloadExcel = downloadExcel;
     </script>
 </body>
 </html>
