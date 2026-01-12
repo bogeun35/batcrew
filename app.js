@@ -1,10 +1,10 @@
 // ========================================
-// 설정 영역 - 여기를 수정하세요!
+// 설정 영역
 // ========================================
 const CONFIG = {
-    REDASH_URL: 'https://redash.sikdae.com',  // Redash 서버 URL
-    API_KEY: '3YxpesqTXvZtQCPHmVlw2UsFIaOkUrsvCgek0CSv',                   // Redash API Key
-    QUERY_ID: '1335',                      // 쿼리 ID
+    REDASH_URL: 'https://redash.sikdae.com',
+    API_KEY: '3YxpesqTXvZtQCPHmVlw2UsFIaOkUrsvCgek0CSv',
+    QUERY_ID: '1335',
 };
 
 // ========================================
@@ -28,7 +28,8 @@ function getTemplateNumber() {
 // ========================================
 async function fetchRedashData() {
     const templateNumber = getTemplateNumber();
-    const url = `${CONFIG.REDASH_URL}/api/queries/${CONFIG.QUERY_ID}/results`;
+    // URL에 api_key를 포함하는 방식으로 변경
+    const url = `${CONFIG.REDASH_URL}/api/queries/${CONFIG.QUERY_ID}/results?api_key=${CONFIG.API_KEY}`;
     
     try {
         showLoading(true);
@@ -38,8 +39,8 @@ async function fetchRedashData() {
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Authorization': `Key ${CONFIG.API_KEY}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify({
                 parameters: {
@@ -54,6 +55,7 @@ async function fetchRedashData() {
         }
 
         const data = await response.json();
+        console.log('API 응답:', data); // 디버깅용
         
         // job 방식의 응답 처리
         if (data.job) {
@@ -86,18 +88,18 @@ async function pollJobResult(jobId) {
     for (let i = 0; i < maxAttempts; i++) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
         
-        const response = await fetch(`${CONFIG.REDASH_URL}/api/jobs/${jobId}`, {
+        const response = await fetch(`${CONFIG.REDASH_URL}/api/jobs/${jobId}?api_key=${CONFIG.API_KEY}`, {
             headers: {
-                'Authorization': `Key ${CONFIG.API_KEY}`
+                'Accept': 'application/json'
             }
         });
         
         const jobData = await response.json();
         
         if (jobData.job.status === 3) { // 완료
-            const resultResponse = await fetch(`${CONFIG.REDASH_URL}/api/query_results/${jobData.job.query_result_id}`, {
+            const resultResponse = await fetch(`${CONFIG.REDASH_URL}/api/query_results/${jobData.job.query_result_id}?api_key=${CONFIG.API_KEY}`, {
                 headers: {
-                    'Authorization': `Key ${CONFIG.API_KEY}`
+                    'Accept': 'application/json'
                 }
             });
             
